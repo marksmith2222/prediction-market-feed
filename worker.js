@@ -1,4 +1,4 @@
-//update
+#//update
 const headers = {
   "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",
@@ -24,7 +24,7 @@ export default {
     if (url.pathname === "/test-trades") {
       try {
         const response = await fetch(
-          "https://prediction.com/api/v2/trades?min_total=500&limit=20",
+          "https://prediction.com/api/v2/events?limit=1",
           {
             headers: {
               "X-API-Key": env.PREDICTION_API_KEY
