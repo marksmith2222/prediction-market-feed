@@ -1,0 +1,142 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prediction Market Real Time Feed</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b1220;color:#e8f0fa;font:15px system-ui,Arial}
+main{max-width:950px;margin:auto;padding:18px}
+h1{font-size:24px}
+p{color:#aabbd0}
+section{background:#172235;border:1px solid #35445b;border-radius:12px;padding:15px;margin:14px 0}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+label{display:block;color:#c3d0e1;font-size:13px}
+input,select,button{width:100%;padding:11px;margin-top:5px;border-radius:8px;font-size:16px}
+input,select{background:white;color:#111;border:1px solid #8292aa}
+button{background:#2878e5;color:white;border:0;font-weight:bold}
+table{width:100%;border-collapse:collapse;min-width:680px}
+th,td{padding:10px;text-align:left;border-bottom:1px solid #35445b}
+th{color:#9fb4d2}
+.scroll{overflow-x:auto}
+small{color:#aabbd0}
+</style>
+</head>
+<body>
+<main>
+<h1>Prediction Market Real Time Feed</h1>
+<p>Kalshi &amp; Polymarket — Large Trade Monitor</p>
+<section class="grid">
+<label>Platform
+<select id="platform">
+<option value="both">Both</option>
+<option value="Kalshi">Kalshi</option>
+<option value="Polymarket">Polymarket</option>
+</select></label>
+<label>Side
+<select id="side">
+<option value="both">YES &amp; NO</option>
+<option value="YES">YES</option>
+<option value="NO">NO</option>
+</select></label>
+<label>Minimum trade ($)
+<input id="minAmount" type="number" value="500"></label>
+<label>Maximum trade ($)
+<input id="maxAmount" type="number" value="1000000"></label>
+<label>Minimum price ($)
+<input id="minPrice" type="number" step=".01" value=".10"></label>
+<label>Maximum price ($)
+<input id="maxPrice" type="number" step=".01" value=".90"></label>
+<label>Group by
+<select id="group">
+<option value="time">Newest trades</option>
+<option value="event">Event</option>
+<option value="side">YES / NO</option>
+</select></label>
+<label>Trade data API endpoint
+<input id="api" placeholder="https://your-feed-api.example/trades"></label>
+</section>
+<section>
+<button id="refresh">Refresh trades</button>
+<p id="status">Enter a working trade-feed API endpoint to load live trades.</p>
+<small>Dashboard requires a compatible live data service. GitHub Pages alone does not supply trade data.</small>
+</section>
+<section class="scroll">
+<table>
+<thead><tr>
+<th>Time</th><th>Platform</th><th>Event</th><th>Side</th><th>Price</th><th>Trade ($)</th>
+</tr></thead>
+<tbody id="results"></tbody>
+</table>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const ids=['platform','side','minAmount','maxAmount','minPrice','maxPrice','group','api'];
+for(const id of ids){
+ const saved=localStorage.getItem('feed_'+id);
+ if(saved!==null)$(id).value=saved;
+ $(id).addEventListener('change',()=>localStorage.setItem('feed_'+id,$(id).value));
+}
+function number(v){return Number(v)}
+function normalize(t){
+ const price=number(t.price);
+ const amount=number(t.amount??t.tradeSize??t.sizeUsd);
+ return {
+ time:t.time??t.timestamp,
+ platform:String(t.platform??''),
+ event:String(t.event??t.title??''),
+ side:String(t.side??'').toUpperCase(),
+ price,amount
+ };
+}
+function safeTime(v){
+ if(!v)return '';
+ const d=new Date(v);
+ return isNaN(d.getTime())?String(v):d.toLocaleString();
+}
+function render(rows){
+ const body=$('results');body.replaceChildren();
+ for(const t of rows){
+ const tr=document.createElement('tr');
+ const values=[safeTime(t.time),t.platform,t.event,t.side,
+ '$'+t.price.toFixed(2),'$'+t.amount.toLocaleString()];
+ for(const value of values){
+ const td=document.createElement('td');
+ td.textContent=value;tr.appendChild(td);
+ }
+ body.appendChild(tr);
+ }
+}
+async function refresh(){
+ const url=$('api').value.trim();
+ if(!url){$('status').textContent='Enter a trade-feed API endpoint first.';return}
+ $('status').textContent='Loading trades...';
+ try{
+ const response=await fetch(url);
+ if(!response.ok)throw Error('HTTP '+response.status);
+ const data=await response.json();
+ const source=Array.isArray(data)?data:data.trades;
+ if(!Array.isArray(source))throw Error('Expected an array of trades');
+ const min=number($('minAmount').value),max=number($('maxAmount').value);
+ const low=number($('minPrice').value),high=number($('maxPrice').value);
+ let rows=source.map(normalize).filter(t=>
+ Number.isFinite(t.amount)&&Number.isFinite(t.price)&&
+ t.amount>=min&&t.amount<=max&&
+ t.price>=low&&t.price<=high&&
+ ($('platform').value==='both'||t.platform===$('platform').value)&&
+ ($('side').value==='both'||t.side===$('side').value));
+ const group=$('group').value;
+ rows.sort((a,b)=>group==='event'?a.event.localeCompare(b.event):
+ group==='side'?a.side.localeCompare(b.side):
+ new Date(b.time)-new Date(a.time));
+ render(rows);
+ $('status').textContent=rows.length+' matching trades';
+ }catch(e){$('status').textContent='Could not load trades: '+e.message}
+}
+$('refresh').addEventListener('click',refresh);
+</script>
+</body>
+</html>
